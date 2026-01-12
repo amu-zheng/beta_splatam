@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from configs.config import load_config
-from gradslam_datasets import ReplicaDataset, TUMDataset, UTMMDataset
+from gradslam_datasets import ReplicaDataset, TUMDataset, UTMMDataset, StardustDataset
 from slam.gaussian_model import GaussianModel
 from slam.mapper import Mapper
 from slam.renderer import Renderer
@@ -21,6 +21,7 @@ from utils.pose_utils import (
     get_camera_from_tensor,
     get_tensor_from_camera,
     preintegrate_imu,
+    vecs_to_rot_matrix,
 )
 
 
@@ -31,6 +32,8 @@ def get_dataset_type(name):
         return TUMDataset
     elif name.lower() == "utmm":
         return UTMMDataset
+    elif name.lower() == "gemini":
+        return StardustDataset
     else:
         raise ValueError(f"Unknown dataset {name}")
 
