@@ -40,7 +40,7 @@ class Mapper:
 
     def __init__(self, slam):
         self.cfg = slam.cfg
-
+        self.mask = torch.from_numpy(slam.image_mask).to(slam.device)
         # Inherit global variables
         self.gaussians = slam.gaussians
         self.n_img = slam.n_img
@@ -147,7 +147,7 @@ class Mapper:
                 )
                 depth = result["depth"][0, :, :]
                 silhouette = result["depth"][1, :, :]
-                presence_sil_mask = silhouette > 0.99
+                presence_sil_mask = (silhouette > 0.99) & self.mask
                 depth[~presence_sil_mask] = 0
                 valid_depth_indices = torch.where(depth > 0)
                 valid_depth_indices = torch.stack(valid_depth_indices, dim=1)
@@ -253,7 +253,7 @@ class Mapper:
             )
             depth = result["depth"][0, :, :]
             silhouette = result["depth"][1, :, :]
-            presence_sil_mask = silhouette > 0.99
+            presence_sil_mask = (silhouette > 0.99) & self.mask
             depth[~presence_sil_mask] = 0
             valid_depth_indices = torch.where(depth > 0)
             valid_depth_indices = torch.stack(valid_depth_indices, dim=1)
@@ -533,7 +533,7 @@ class Mapper:
             if torch.sum(non_presence_mask) > 0:
                 # Get the new pointcloud in the world frame
                 curr_w2c = get_camera_from_tensor(camera_pose)
-                valid_depth_mask = depth > 0
+                valid_depth_mask = (depth > 0) & self.mask
                 non_presence_mask = non_presence_mask & valid_depth_mask.reshape(-1)
                 new_pt_cld, mean3_sq_dist = self.get_pointcloud(
                     gt_color,
@@ -631,8 +631,10 @@ class Mapper:
             # Get the new frame Gaussians based on the Silhouette
             # Get the new pointcloud in the world frame
             curr_w2c = get_camera_from_tensor(camera_pose)
-            valid_depth_mask = depth > 0
+            valid_depth_mask = (depth > 0) & self.mask
             non_presence_mask = non_presence_mask & valid_depth_mask.reshape(-1)
+            # TODO(amu): use image_mask to filter.
+
             new_pt_cld, mean3_sq_dist = self.get_pointcloud(
                 gt_color,
                 depth,
@@ -853,8 +855,9 @@ class Mapper:
                 ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(image, gt_color))
                 loss = losses["depth"] + 0.5 * losses["im"]
             else:
+                # TODO(amu): use image_mask to filter.
                 loss = (1 - self.cfg["mapping"]["lambda_dssim"]) * l1_loss(
-                    image, gt_color
+                    image, gt_color, mask = self.mask
                 ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(image, gt_color))
                 if (
                     not self.cfg["use_gt_depth"]
@@ -867,7 +870,9 @@ class Mapper:
                     self.cfg["use_gt_depth"]
                     and self.cfg["mapping"]["use_depth_estimate_loss"]
                 ):
-                    depth_mask = gt_depth > 0
+                    depth_mask = (gt_depth > 0) & self.mask
+                    # TODO(amu): use image_mask to filter.
+
                     loss += self.cfg["mapping"]["pearson_weight"] * pearson_loss(
                         depth, gt_depth, mask=depth_mask, invert_estimate=False
                     )

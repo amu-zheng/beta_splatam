@@ -6,11 +6,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision
+import imageio
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from configs.config import load_config
-from gradslam_datasets import ReplicaDataset, TUMDataset, UTMMDataset
+from gradslam_datasets import ReplicaDataset, TUMDataset, UTMMDataset, StardustDataset
 from slam.gaussian_model import GaussianModel
 from slam.mapper import Mapper
 from slam.renderer import Renderer
@@ -21,6 +22,7 @@ from utils.pose_utils import (
     get_camera_from_tensor,
     get_tensor_from_camera,
     preintegrate_imu,
+    vecs_to_rot_matrix,
 )
 
 
@@ -31,6 +33,8 @@ def get_dataset_type(name):
         return TUMDataset
     elif name.lower() == "utmm":
         return UTMMDataset
+    elif name.lower() == "gemini":
+        return StardustDataset
     else:
         raise ValueError(f"Unknown dataset {name}")
 
@@ -137,6 +141,27 @@ class SLAM:
                     self.cfg["desired_height"] * (1 if self.cfg["use_gt_depth"] else 2),
                 ),
             )
+
+
+        if self.cfg["image_mask"]:
+            mask_np = imageio.v3.imread(
+                os.path.join(
+                    self.cfg["inputdir"],
+                    self.cfg["scene"],
+                    "mask.png"
+                )
+            )
+            # TODO(amu): reshape the mask into desired size.
+            resized_mask = cv2.resize(
+                mask_np,
+                (self.dataset.desired_width, self.dataset.desired_height),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            if resized_mask.ndim == 3:
+                resized_mask = np.mean(resized_mask, axis=-1).astype(np.uint8)
+            self.image_mask = (resized_mask < 127)
+        else:
+            self.image_mask = None
 
         # Initialize Mapping and Tracking threads
         self.mapper = Mapper(self)

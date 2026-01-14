@@ -15,3 +15,4 @@ from .tum import TUMDataset
 # from .scannetpp import ScannetPPDataset
 # from .nerfcapture import NeRFCaptureDataset
 from .utmm import UTMMDataset
+from .stardust import StardustDataset

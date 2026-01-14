@@ -176,8 +176,9 @@ def propagate_imu(camm1, camm2, imu_meas_list, c2i, dt_cam, dt_imu):
 
     # Then, do IMU preintegration
     for imu_meas in imu_meas_list:
-        lin_accel = imu_meas[25:28]
-        ang_vel = imu_meas[13:16]
+        # imu_meas: wx wy wz ax ay az
+        ang_vel = imu_meas[:3]
+        lin_accel = imu_meas[3:6]
 
         # Remove the gravity component
         lin_accel -= i2w[:3, :3].T @ G.to(i2w)
@@ -381,3 +382,58 @@ def get_tensor_from_camera(RT, Tquad=False):
     tran = RT[:3, 3].detach()
 
     return torch.cat([quat, tran])
+
+
+def vecs_to_rot_matrix(v1: np.ndarray, v2: np.ndarray) -> torch.Tensor:
+    """
+    输入：NumPy数组（单向量(3,)）
+    输出：PyTorch张量（旋转矩阵(3,3)）
+    功能：计算从单向量v1到v2的旋转矩阵（消除torch.cross弃用警告）
+    """
+    # 1. 输入校验（确保是NumPy数组且形状为(3,)）
+    assert isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray), "输入必须是NumPy数组"
+    assert v1.shape == (3,) and v2.shape == (3,), "输入必须是形状为(3,)的单向量"
+
+    # 2. NumPy数组转PyTorch张量（保持精度，默认CPU，需GPU可加.to('cuda')）
+    v1_tensor = torch.from_numpy(v1).float()
+    v2_tensor = torch.from_numpy(v2).float()
+
+    # 3. 单位化（处理零向量，避免除零错误）
+    v1_norm = torch.norm(v1_tensor)
+    v2_norm = torch.norm(v2_tensor)
+
+    if v1_norm < 1e-8 or v2_norm < 1e-8:
+        raise ValueError("输入向量不能是零向量")
+
+    v1_unit = v1_tensor / v1_norm
+    v2_unit = v2_tensor / v2_norm
+
+    # 4. 计算旋转轴和旋转角（核心修复：显式指定dim=-1消除警告）
+    cross = torch.cross(v1_unit, v2_unit, dim=-1)  # (3,) 显式指定最后一维为叉乘维度
+    dot = torch.dot(v1_unit, v2_unit)  # 标量
+    dot_clamped = torch.clamp(dot, -1.0 + 1e-8, 1.0 - 1e-8)  # 防止acos溢出
+
+    # 5. 初始化旋转矩阵（张量）
+    rot = torch.eye(3, dtype=v1_tensor.dtype, device=v1_tensor.device)
+
+    # 6. 处理平行/反平行边界情况
+    cross_norm = torch.norm(cross)
+    if cross_norm < 1e-6:
+        # 平行：无旋转 或 反平行：旋转180度
+        rot = rot if dot_clamped > 0 else -rot
+    else:
+        # 7. 非平行：罗德里格斯公式
+        cross_mat = torch.tensor([
+            [0, -cross[2], cross[1]],
+            [cross[2], 0, -cross[0]],
+            [-cross[1], cross[0], 0]
+        ], dtype=v1_tensor.dtype, device=v1_tensor.device)
+
+        theta = torch.acos(dot_clamped)
+        sin_theta = torch.sin(theta)
+        cos_theta = torch.cos(theta)
+
+        # 罗德里格斯公式计算旋转矩阵（张量运算）
+        rot = rot + sin_theta * cross_mat + (1 - cos_theta) * cross_mat @ cross_mat
+
+    return rot
