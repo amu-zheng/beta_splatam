@@ -602,7 +602,9 @@ class Mapper:
                 print("First frame. Initializing Gaussians")
                 non_presence_mask = torch.ones(
                     depth.shape, dtype=bool, device=self.cfg["device"]
-                ).reshape(-1)
+                )
+                non_presence_mask = non_presence_mask & self.mask
+                non_presence_mask = non_presence_mask.reshape(-1)
 
                 render_mask = torch.zeros(
                     depth.shape, dtype=bool, device=self.cfg["device"]
@@ -619,12 +621,12 @@ class Mapper:
 
                 # Check for new foreground objects by using GT depth
                 render_depth = result["depth"][0, :, :]
-                depth_error = torch.abs(depth - render_depth) * (depth > 0)
+                depth_error = torch.abs(depth - render_depth) * (depth > 0) * self.mask
                 non_presence_depth_mask = depth_error > 10 * depth_error.median()
 
                 # Determine non-presence mask
                 non_presence_mask = non_presence_sil_mask | non_presence_depth_mask
-
+                non_presence_mask = non_presence_mask & self.mask
                 # Flatten mask
                 non_presence_mask = non_presence_mask.reshape(-1)
 
@@ -856,9 +858,11 @@ class Mapper:
                 loss = losses["depth"] + 0.5 * losses["im"]
             else:
                 # TODO(amu): use image_mask to filter.
+                masked_gt_color = gt_color * self.mask.unsqueeze(0)
+                masked_image = image * self.mask.unsqueeze(0)
                 loss = (1 - self.cfg["mapping"]["lambda_dssim"]) * l1_loss(
                     image, gt_color, mask = self.mask
-                ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(image, gt_color))
+                ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(masked_image, masked_gt_color))
                 if (
                     not self.cfg["use_gt_depth"]
                     and self.cfg["mapping"]["use_depth_estimate_loss"]

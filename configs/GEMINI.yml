@@ -1,7 +1,7 @@
 dataset: "gemini"
 device: "cuda:0"
 method: "mm3dgs"
-inputdir: /home/user/workspace/data_ws/Stardust # TODO: input dataset location
+inputdir: /data/dataset/gemini2/mm3dgs # TODO: input dataset location
 scene: "gemini_02"
 outputdir: output/gemini/test
 dataloader: "gradslam"
@@ -12,9 +12,9 @@ image_mask: true
 scene_radius_depth_ratio: 2
 # iteration: 500 # For loading checkpoint
 
-start_idx: 50
-stride: 2
-early_stop_idx: 200
+start_idx: 200
+stride: 1
+early_stop_idx: 290
 
 desired_height: 360
 desired_width: 640
@@ -53,7 +53,7 @@ mapping:
   do_BA: false
   use_depth_estimate_loss: true
   pearson_weight: 0.001
-  sh_degree: 0
+  sh_degree: 1
   cam_t_lr: 0.002
   cam_q_lr: 0.002
   position_lr_init: 0.0001
