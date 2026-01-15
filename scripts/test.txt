@@ -1,0 +1,12 @@
+vid_image_cv = (image*255).to(torch.uint8).permute(1,2,0).cpu().numpy()
+vid_image_cv = cv2.cvtColor(vid_image_cv, cv2.COLOR_RGB2BGR)
+cv2.imwrite("./test.png", vid_image_cv)
+
+
+
+from PIL import Image
+mask = new_points_vis_mask
+mask_np = mask.cpu().numpy()
+mask_img = (mask_np.astype(np.uint8)) * 255
+img = Image.fromarray(mask_img, mode="L")
+img.save("test_mask.png")

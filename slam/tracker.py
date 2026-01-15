@@ -127,8 +127,8 @@ class Tracker:
                 losses["im"] = torch.abs(gt_color - image)[color_mask].sum()
                 loss = losses["depth"] + 0.5 * losses["im"]
             else:
-                # loss = l1_loss(image, gt_color, presence_sil_mask)
-                loss = torch.abs((image - gt_color))[:, presence_sil_mask].mean()
+                loss = l1_loss(image, gt_color, presence_sil_mask)
+                # loss = torch.abs((image - gt_color))[:, presence_sil_mask].mean()
                 if (
                     not self.cfg["use_gt_depth"]
                     and self.cfg["tracking"]["use_depth_estimate_loss"]
