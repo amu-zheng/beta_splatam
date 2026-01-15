@@ -12,9 +12,9 @@ image_mask: true
 scene_radius_depth_ratio: 2
 # iteration: 500 # For loading checkpoint
 
-start_idx: 50
-stride: 2
-early_stop_idx: 200
+start_idx: 150
+stride: 3
+early_stop_idx: 750
 
 desired_height: 360
 desired_width: 640

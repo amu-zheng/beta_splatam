@@ -16,7 +16,7 @@ class Tracker:
 
     def __init__(self, slam):
         self.cfg = slam.cfg
-        self.mask = torch.from_numpy(slam.image_mask).to(slam.device)
+        self.mask = torch.from_numpy(slam.image_mask).to(slam.device) if slam.image_mask is not None else None
         # Inherit global variables
         self.gaussians = slam.gaussians
         self.n_img = slam.n_img
@@ -104,9 +104,10 @@ class Tracker:
             image = result["render"]
             depth = result["depth"][0, :, :]
             silhouette = result["depth"][1, :, :]
-            presence_sil_mask = (silhouette > 0.99) & self.mask
+            presence_sil_mask = (silhouette > 0.99)
             # TODO(amu): whether need use var_depth to fileter the renders.
-
+            if self.mask is not None:
+                presence_sil_mask = presence_sil_mask & self.mask
             # Loss
             if self.cfg["method"].lower() == "splatam":
                 losses = {}  # Loss dictionary
