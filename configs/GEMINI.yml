@@ -1,23 +1,24 @@
 dataset: "gemini"
 device: "cuda:0"
-method: "mm3dgs"
-inputdir: /home/user/workspace/data_ws/Stardust # TODO: input dataset location
-scene: "gemini_02"
+method: "splatam" # "splatam", "mm3dgs"
+inputdir: /data/dataset/gemini2/mm3dgs # TODO: input dataset location
+scene: "gemini_10"
 outputdir: output/gemini/test
 dataloader: "gradslam"
 use_gt_depth: true # If False, a monocular depth estimator is used
 dpt_model: "midas"
 white_background: false
-image_mask: true
-scene_radius_depth_ratio: 2
+image_mask: false
+scene_radius_depth_ratio: 3
+imu_rate: 200
 # iteration: 500 # For loading checkpoint
 
-start_idx: 150
+start_idx: 0
 stride: 3
-early_stop_idx: 750
+#early_stop_idx: 900
 
-desired_height: 360
-desired_width: 640
+desired_height: 180
+desired_width: 320
 save_iterations:
   - 500
   - 1000
@@ -32,7 +33,7 @@ pipeline:
   transform_means_python: true
   force_isotropic: true
 tracking:
-  iters: 100
+  iters: 200
   use_gt_pose: false
   dynamics_model: "imu" #"const_velocity","imu"
   use_imu_loss: false
@@ -42,9 +43,9 @@ tracking:
   position_lr: 0.002
   rotation_lr: 0.002
 mapping:
-  iters: 150
-  kf_every: 5
-  niqe_kf: true
+  iters: 200
+  kf_every: 1
+  niqe_kf: false
   niqe_window_size: 5
   kf_window_size: 25
   covisibility_level: 1

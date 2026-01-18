@@ -147,7 +147,7 @@ class Mapper:
                 )
                 depth = result["depth"][0, :, :]
                 silhouette = result["depth"][1, :, :]
-                presence_sil_mask = (silhouette > 0.99)
+                presence_sil_mask = (silhouette > 0.80)
                 # TODO(amu): whether need use var_depth to fileter the renders.
                 if self.mask is not None:
                     presence_sil_mask = presence_sil_mask & self.mask
@@ -575,8 +575,11 @@ class Mapper:
                     (new_pt_cld.shape[0], 1), dtype=torch.float, device="cuda"
                 )
                 # Spherical pixel-wide scaling
+                # new_scaling = torch.log(torch.sqrt(mean3_sq_dist))[..., None].repeat(
+                #     1, 3
+                # )
                 new_scaling = torch.log(torch.sqrt(mean3_sq_dist))[..., None].repeat(
-                    1, 3
+                    1, 1
                 )
                 self.gaussians.densification_postfix(
                     new_xyz=new_pt_cld[:, :3],
@@ -677,7 +680,8 @@ class Mapper:
                 (new_pt_cld.shape[0], 1), dtype=torch.float, device="cuda"
             )
             # Spherical pixel-wide scaling
-            new_scaling = torch.log(torch.sqrt(mean3_sq_dist))[..., None].repeat(1, 3)
+            # new_scaling = torch.log(torch.sqrt(mean3_sq_dist))[..., None].repeat(1, 3)
+            new_scaling = torch.log(torch.sqrt(mean3_sq_dist))[..., None].repeat(1, 1)
             self.gaussians.densification_postfix(
                 new_xyz=new_pt_cld[:, :3],
                 new_features_dc=new_features[:, :, 0:1].transpose(1, 2).contiguous(),
@@ -844,18 +848,23 @@ class Mapper:
             silhouette = result["depth"][1, :, :]
             presence_sil_mask = silhouette > 0.5
 
+            depth_sq = result["depth"][2, :, :]
+            # Depths are rendered via the rasterizer, which takes into account
+            # opacity. Thus, when the range of depths present in that pixel is larger,
+            # the difference between depth_sq and depth**2 should increase.
+            uncertainty = depth_sq - depth ** 2
+            uncertainty = uncertainty.detach()
+            nan_mask = (~torch.isnan(depth)) & (~torch.isnan(uncertainty))
+            mask = gt_depth > 0
+            mask = mask & nan_mask
+
             # Loss
             if self.cfg["method"].lower() == "splatam":
                 losses = {}  # Loss dictionary
-                depth_sq = result["depth"][2, :, :]
-                # Depths are rendered via the rasterizer, which takes into account
-                # opacity. Thus, when the range of depths present in that pixel is larger,
-                # the difference between depth_sq and depth**2 should increase.
-                uncertainty = depth_sq - depth**2
-                uncertainty = uncertainty.detach()
-                nan_mask = (~torch.isnan(depth)) & (~torch.isnan(uncertainty))
-                mask = gt_depth > 0
-                mask = mask & nan_mask
+                # ignore_outlier_depth_loss
+                # depth_error = torch.abs(gt_depth - depth) * (gt_depth > 0.0)
+                # depth_mask = (depth_error < 10 * depth_error.median())
+                # mask = mask & depth_mask
                 mask = mask.detach()
                 # Depth Loss
                 losses["depth"] = torch.abs(gt_depth - depth)[mask].mean()
@@ -864,6 +873,9 @@ class Mapper:
                     image, gt_color
                 ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(image, gt_color))
                 loss = losses["depth"] + 0.5 * losses["im"]
+                loss += self.cfg["mapping"]["pearson_weight"] * pearson_loss(
+                    depth, gt_depth, mask=gt_depth > 0, invert_estimate=False
+                )
             else:
                 # TODO(amu): use image_mask to filter.
                 masked_image = image * self.mask.unsqueeze(0) if self.mask is not None else image
@@ -882,7 +894,8 @@ class Mapper:
                     self.cfg["use_gt_depth"]
                     and self.cfg["mapping"]["use_depth_estimate_loss"]
                 ):
-                    depth_mask = gt_depth > 0
+                    depth_mask = mask  & (gt_depth > 0)
+                    depth_mask = depth_mask.detach()
                     # TODO(amu): use image_mask to filter.
                     if self.mask is not None:
                         depth_mask = depth_mask & self.mask

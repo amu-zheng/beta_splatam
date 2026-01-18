@@ -144,13 +144,7 @@ class SLAM:
 
 
         if self.cfg["image_mask"]:
-            mask_np = imageio.v3.imread(
-                os.path.join(
-                    self.cfg["inputdir"],
-                    self.cfg["scene"],
-                    "mask.png"
-                )
-            )
+            mask_np = imageio.v3.imread(os.path.join(self.cfg["inputdir"],self.cfg["scene"],"mask.png"))
             # TODO(amu): reshape the mask into desired size.
             resized_mask = cv2.resize(
                 mask_np,
@@ -262,14 +256,21 @@ class SLAM:
                 self.gaussians,
                 camera_pose=camera_pose,
             )
+            vis_mask = est_depth_scaled
             image = result["render"]
             depth = result["depth"][0, :, :]
-
+            color_mask = torch.tile(vis_mask, (3,1,1)).detach()
+            weighted_render_image = image * color_mask
+            weighted_image = gt_color * color_mask
+            diff_image = torch.abs(weighted_image - weighted_render_image).detach()
             vid_image = torch.cat(
                 [
-                    gt_color,
-                    image,
-                    torch.abs(image - gt_color),
+                    # gt_color,
+                    # image,
+                    # torch.abs(image - gt_color),
+                    weighted_image,
+                    weighted_render_image,
+                    diff_image,
                 ],
                 dim=2,
             )
@@ -283,11 +284,17 @@ class SLAM:
                     dim=2,
                 )
             else:
+                weighted_render_depth = depth * vis_mask
+                weighted_depth = gt_depth * vis_mask
+                diff_depth = torch.abs(weighted_depth - weighted_render_depth).detach()
                 depth_image = torch.cat(
                     [
-                        depth_to_rgb(gt_depth),
-                        depth_to_rgb(depth),
-                        depth_to_rgb(gt_depth),
+                        # depth_to_rgb(gt_depth),
+                        # depth_to_rgb(depth),
+                        # depth_to_rgb(gt_depth),
+                        depth_to_rgb(weighted_depth),
+                        depth_to_rgb(weighted_render_depth),
+                        depth_to_rgb(diff_depth),
                     ],
                     dim=2,
                 )
@@ -472,10 +479,10 @@ class SLAM:
                             )
                             est_depth_scaled = 1 / (scale * est_depth + shift).detach()
 
-                if self.cfg["debug"]["create_video"] and idx > 0:
-                    self.save_video_frame(
-                        idx, gt_color, gt_depth, est_depth_scaled, "drack"
-                    )
+                # if self.cfg["debug"]["create_video"] and idx > 0:
+                #     self.save_video_frame(
+                #         idx, gt_color, gt_depth, est_depth_scaled, "drack"
+                #     )
 
                 # Mapping
                 if idx == 0:
@@ -496,17 +503,25 @@ class SLAM:
                 with torch.no_grad():
                     self.gt_pose_list[idx] = get_tensor_from_camera(gt_w2c)
                     if self.cfg["debug"]["create_video"]:
-                        if new_gaussians_vis_mask is not None:
+                        # if new_gaussians_vis_mask is not None:
+                        #     self.save_video_frame(
+                        #         idx,
+                        #         gt_color,
+                        #         gt_depth,
+                        #         new_gaussians_vis_mask.float(),
+                        #         "map",
+                        #     )
+                        # else:
+                        #     self.save_video_frame(
+                        #         idx, gt_color, gt_depth, est_depth_scaled, "map"
+                        #     )
+                        if idx > 0:
                             self.save_video_frame(
                                 idx,
                                 gt_color,
                                 gt_depth,
-                                new_gaussians_vis_mask.float(),
+                                self.tracker.get_track_mask(),
                                 "map",
-                            )
-                        else:
-                            self.save_video_frame(
-                                idx, gt_color, gt_depth, est_depth_scaled, "map"
                             )
 
                     # Save map as checkpoint

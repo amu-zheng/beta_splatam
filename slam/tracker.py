@@ -26,6 +26,7 @@ class Tracker:
         if slam.use_imu:
             self.tf = slam.tf
             self.tstamps = slam.tstamps
+            self.imu_rate = self.cfg["imu_rate"]
 
         # Optimization params
         self.num_iter = self.cfg["tracking"]["iters"]
@@ -41,6 +42,7 @@ class Tracker:
             # Log the tracking per-iteration runtime
             self.tracking_time_sum = 0
             self.tracking_iter_count = 0
+        self.track_mask = None
 
     def optimize_cam(
         self,
@@ -104,21 +106,27 @@ class Tracker:
             image = result["render"]
             depth = result["depth"][0, :, :]
             silhouette = result["depth"][1, :, :]
-            presence_sil_mask = (silhouette > 0.99)
+            # presence_sil_mask = (silhouette > 0.99)
+            presence_sil_mask = (silhouette > 0.80)
             # TODO(amu): whether need use var_depth to fileter the renders.
             if self.mask is not None:
                 presence_sil_mask = presence_sil_mask & self.mask
+
+            depth_sq = result["depth"][2, :, :]
+            uncertainty = depth_sq - depth ** 2
+            uncertainty = uncertainty.detach()
+            nan_mask = (~torch.isnan(depth)) & (~torch.isnan(uncertainty))
+            # ignore_outlier_depth_loss
+            # depth_error = torch.abs(gt_depth - depth) * (gt_depth > 0)
+            # depth_mask = (depth_error < 10 * depth_error.median())
+            mask = gt_depth > 0
+            mask = mask & nan_mask
+            mask = mask & presence_sil_mask
+            # mask = mask & depth_mask
+            mask = mask.detach()
             # Loss
             if self.cfg["method"].lower() == "splatam":
                 losses = {}  # Loss dictionary
-                depth_sq = result["depth"][2, :, :]
-                uncertainty = depth_sq - depth**2
-                uncertainty = uncertainty.detach()
-                nan_mask = (~torch.isnan(depth)) & (~torch.isnan(uncertainty))
-                mask = gt_depth > 0
-                mask = mask & nan_mask
-                mask = mask & presence_sil_mask
-                mask = mask.detach()
                 # Depth Loss
                 losses["depth"] = torch.abs(gt_depth - depth)[mask].sum()
                 # RGB Loss
@@ -126,8 +134,13 @@ class Tracker:
                 color_mask = color_mask.detach()
                 losses["im"] = torch.abs(gt_color - image)[color_mask].sum()
                 loss = losses["depth"] + 0.5 * losses["im"]
+                # pearson_loss consider the geometry consistency.
+                # l1_loss consider the measurement error.
+                loss += self.cfg["tracking"]["pearson_weight"] * pearson_loss(
+                        depth, gt_depth, mask=mask, invert_estimate=True
+                    )
             else:
-                loss = l1_loss(image, gt_color, presence_sil_mask)
+                loss = l1_loss(image, gt_color, mask)
                 # loss = torch.abs((image - gt_color))[:, presence_sil_mask].mean()
                 if (
                     not self.cfg["use_gt_depth"]
@@ -140,7 +153,7 @@ class Tracker:
                     self.cfg["use_gt_depth"]
                     and self.cfg["tracking"]["use_depth_estimate_loss"]
                 ):
-                    depth_mask = presence_sil_mask & (gt_depth > 0)
+                    depth_mask = mask
                     loss += self.cfg["tracking"]["pearson_weight"] * pearson_loss(
                         depth, gt_depth, mask=depth_mask, invert_estimate=True
                     )
@@ -155,7 +168,7 @@ class Tracker:
                         self.cfg["tracking"]["imu_T_weight"] * T_imu_loss
                         + self.cfg["tracking"]["imu_q_weight"] * q_imu_loss
                     )
-
+            self.track_mask = mask
             loss.backward()
 
             # Optimize
@@ -215,8 +228,7 @@ class Tracker:
                         imu_meas,
                         self.tf["c2i"],
                         self.tstamps[idx - 1] - self.tstamps[idx - 2],
-                        # 1 / self.cfg["cam"]["fps"] * self.cfg["stride"],
-                        1 / 100.0,
+                        1 / self.imu_rate
                     )
                 else:
                     # Assume 0 velocity at the start
@@ -226,7 +238,7 @@ class Tracker:
                         imu_meas,
                         self.tf["c2i"],
                         1.0,
-                        1 / 100.0,
+                        1 / self.imu_rate
                     )
             else:
                 raise ValueError(f"Unknown dynamics model {self.dyn_model}")
@@ -266,3 +278,6 @@ class Tracker:
             )
 
         return image
+
+    def get_track_mask(self):
+        return self.track_mask
