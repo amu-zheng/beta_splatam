@@ -119,7 +119,7 @@ class Tracker:
             # ignore_outlier_depth_loss
             # depth_error = torch.abs(gt_depth - depth) * (gt_depth > 0)
             # depth_mask = (depth_error < 10 * depth_error.median())
-            mask = gt_depth > 0
+            mask = (gt_depth > 0.0) & (gt_depth < 3.0)
             mask = mask & nan_mask
             mask = mask & presence_sil_mask
             # mask = mask & depth_mask

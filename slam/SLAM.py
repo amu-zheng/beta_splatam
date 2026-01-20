@@ -82,7 +82,8 @@ class SLAM:
             self.tf["c2i"] = self.dataset.get_c2i_tf()
 
         # Create output directories
-        self.output = self.cfg["outputdir"]
+        # self.output = self.cfg["outputdir"]
+        self.output = os.path.join(self.cfg["inputdir"], self.cfg["scene"], "output")
         os.makedirs(self.output, exist_ok=True)
 
         # Initialize global variables
@@ -118,7 +119,7 @@ class SLAM:
 
         # Logging
         if self.cfg["debug"]["create_video"]:
-            video_filename = os.path.join(self.cfg["outputdir"], "debug_video.mp4")
+            video_filename = os.path.join(self.output, "debug_video.mp4")
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             self.video_writer = cv2.VideoWriter(
                 video_filename,
@@ -130,7 +131,7 @@ class SLAM:
                 ),
             )
             video_filename_full = os.path.join(
-                self.cfg["outputdir"], "debug_video_full.mp4"
+                self.output, "debug_video_full.mp4"
             )
             self.video_writer_full = cv2.VideoWriter(
                 video_filename_full,
@@ -318,7 +319,7 @@ class SLAM:
 
     def save_map(self, iteration):
         point_cloud_path = os.path.join(
-            self.cfg["outputdir"], "point_cloud/iteration_{}".format(iteration)
+            self.output, "point_cloud/iteration_{}".format(iteration)
         )
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
         print("Map saved to " + os.path.join(point_cloud_path, "point_cloud.ply"))
@@ -401,8 +402,8 @@ class SLAM:
             results["avg_tracking_it_time"] = tracking_time_per_iter * 1000
             results["avg_mapping_it_time"] = mapping_time_per_iter * 1000
 
-        np.savez(os.path.join(self.cfg["outputdir"], "results"), **results)
-        print("Results saved to " + os.path.join(self.cfg["outputdir"], "results.npz"))
+        np.savez(os.path.join(self.output, "results"), **results)
+        print("Results saved to " + os.path.join(self.output, "results.npz"))
 
     def run(self):
         """Run SLAM"""

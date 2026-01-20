@@ -855,7 +855,7 @@ class Mapper:
             uncertainty = depth_sq - depth ** 2
             uncertainty = uncertainty.detach()
             nan_mask = (~torch.isnan(depth)) & (~torch.isnan(uncertainty))
-            mask = gt_depth > 0
+            mask = (gt_depth > 0) & (gt_depth < 3.0)
             mask = mask & nan_mask
 
             # Loss
@@ -869,12 +869,14 @@ class Mapper:
                 # Depth Loss
                 losses["depth"] = torch.abs(gt_depth - depth)[mask].mean()
                 # RGB Loss
+                masked_gt_color = gt_color * mask.unsqueeze(0)
+                masked_render_img = image * mask.unsqueeze(0)
                 losses["im"] = (1 - self.cfg["mapping"]["lambda_dssim"]) * l1_loss(
-                    image, gt_color
-                ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(image, gt_color))
+                    masked_render_img, masked_gt_color
+                ) + self.cfg["mapping"]["lambda_dssim"] * (1.0 - ssim(masked_render_img, masked_gt_color))
                 loss = losses["depth"] + 0.5 * losses["im"]
                 loss += self.cfg["mapping"]["pearson_weight"] * pearson_loss(
-                    depth, gt_depth, mask=gt_depth > 0, invert_estimate=False
+                    depth, gt_depth, mask=mask, invert_estimate=False
                 )
             else:
                 # TODO(amu): use image_mask to filter.
