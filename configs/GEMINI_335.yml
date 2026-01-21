@@ -2,7 +2,7 @@ dataset: "gemini"
 device: "cuda:0"
 method: "splatam" # "splatam", "mm3dgs"
 inputdir: /data/dataset/gemini2/mm3dgs # TODO: input dataset location
-scene: "gemini_10"
+scene: "gemini_640p"
 outputdir: output/gemini/test
 dataloader: "gradslam"
 use_gt_depth: true # If False, a monocular depth estimator is used
@@ -14,10 +14,10 @@ imu_rate: 200
 # iteration: 500 # For loading checkpoint
 
 start_idx: 0
-stride: 3
-#early_stop_idx: 900
+stride: 1
+#early_stop_idx: 300
 
-desired_height: 180
+desired_height: 240
 desired_width: 320
 save_iterations:
   - 500
